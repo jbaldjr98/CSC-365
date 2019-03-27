@@ -1,0 +1,320 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Security;
+using System.IO;
+
+
+// This is the code for your desktop app.
+// Press Ctrl+F5 (or go to Debug > Start Without Debugging) to run your app.
+
+namespace csc365_cv
+{
+    public partial class Form1 : Form
+    {
+        private string fileP = null;
+        private Bitmap bitmp;
+        private Dictionary<int, List<int>> comp = new Dictionary<int, List<int>>();
+        Dictionary<int, List<Coord>> fin = new Dictionary<int, List<Coord>>();
+        List<Coord> fore = new List<Coord>();
+        List<int> labels = new List<int>();
+        Random r = new Random();
+
+        struct Coord
+        {
+            public int x, y;
+
+            public Coord(int j, int i)
+            {
+                x = j;
+                y = i;
+
+            }
+        }
+        
+
+        public Form1()
+        {
+
+            InitializeComponent();
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {//Get file button
+            OpenFileDialog ofd = new OpenFileDialog();
+            if (ofd.ShowDialog() == DialogResult.OK)
+            {
+                try
+                {
+                    var filePath = ofd.FileName;
+                    fileP = filePath;
+                    using (Stream stream = File.Open(filePath, FileMode.Open))
+                    {
+                        Image img = Image.FromStream(stream);
+                        if (img.Height > pictureBox1.Height || img.Width > pictureBox1.Width)
+                        {
+                            var bitmp1 = new Bitmap(img, new Size(pictureBox1.Size.Width, pictureBox1.Height));
+                            bitmp = toBnW(bitmp1);
+
+                        }
+                        else
+                        {
+                            var bitmp1 = new Bitmap(img);
+                            bitmp = toBnW(bitmp1);
+                        }
+
+                        pictureBox1.Image = bitmp;
+                    }
+                }
+                catch (SecurityException ex)
+                {
+                    MessageBox.Show($"Security error.\n\nError message: {ex.Message}\n\n" +
+                   $"Details:\n\n{ex.StackTrace}");
+                }
+
+
+            }
+        }
+
+        private Bitmap toBnW(Bitmap bitmp1)
+        {
+            for (int i = 0; i < bitmp1.Size.Height; i++)
+            {
+                for (int j = 0; j < bitmp1.Size.Width; j++)
+                {
+                    var x = bitmp1.GetPixel(j, i);
+                    if (x.B > 150 || x.R > 150 || x.G > 150)
+                    {
+                        bitmp1.SetPixel(j, i, Color.White);
+                    }
+                    else
+                    {
+                        bitmp1.SetPixel(j, i, Color.Black);
+                    }
+                }
+
+            }
+            return bitmp1;
+
+        }
+
+        private void PictureBox1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void Button3_Click(object sender, EventArgs e)
+        {
+            if (fileP == null)
+            {
+                MessageBox.Show("please select a file first!!");
+            }
+            else
+            {
+                Label();
+
+            }
+
+
+
+        }
+
+        private void Label()
+        {
+            Color background = getBackground();
+            int count = -1;
+            int[,] map = new int[bitmp.Width, bitmp.Height];
+            //finds all components that are not the background
+            for (int i = 0; i < bitmp.Size.Height; i++)
+            {
+                for (int j = 0; j < bitmp.Size.Width; j++)
+                {
+                    var x = bitmp.GetPixel(j, i);
+                    if (!(x.R.Equals(background.R)))
+                    {
+                        Coord y = new Coord(j, i);
+                        fore.Add(y);
+                        if(i ==0 && j == 0)//case that (0,0) isn't background and doesn't have neighbors to check
+                        {
+                            count++;
+                            map[j, i] = count;
+                            List<int> a = new List<int>();
+                            comp.Add(count, a);
+                        }
+                        else if (j == 0)//case that there is no neighbor to the left because we are at the far left side of the picture
+                        {
+                            if (map[j, i - 1] != 0)
+                            {
+                                map[j, i] = map[j, i - 1];
+                            }
+                            else
+                            {
+                                count++;
+                                map[j, i] = count;
+                                List<int> a = new List<int>();
+                                comp.Add(count, a);
+                            }
+                        }
+                        else if (i == 0)//case that there is no above neighbor because we are at the top of the picture
+                        {
+                            if (map[j - 1, i] != 0)
+                            {
+                                map[j, i] = map[j - 1, i];
+                            }
+                            else
+                            {
+                                count++;
+                                map[j, i] = count;
+                                List<int> a = new List<int>();
+
+                                comp.Add(count, a);
+                            }
+
+                        }
+                        else//usual case
+                        {
+                            if (map[j - 1, i] == 0 && map[j, i - 1] == 0)//case that a pixel has no neighbors in a component
+                            {
+                                count++;
+                                map[j, i] = count;
+                                List<int> a = new List<int>();
+                                comp.Add(count, a);
+                            }
+                            else if (map[j, i - 1] != 0)//case that a pixel has a component neighbor above it
+                            {
+                                map[j, i] = map[j, i - 1];
+                                if (map[j - 1, i] != 0 && map[j - 1, i] != map[j, i])
+                                {
+                                    int c = map[j - 1, i];
+                                    List<int> a = comp[map[j, i]];
+                                    if (!a.Contains(c))//sets the equivelency hash between labels
+                                    {
+                                        a.Add(map[j - 1, i]);
+                                        comp[map[j, i]] = a;
+                                    }
+
+                                }
+                            }
+                            else if (map[j - 1, i] != 0)//case that a pixel has a component neighbor to the left
+                            {
+                                map[j, i] = map[j - 1, i];
+                            }
+
+
+                        }
+                    }
+                    else//pixel isn't part of a component
+                    {
+                        map[j, i] = 0;
+                    }
+
+                }
+
+
+
+
+
+            }
+            
+            pictureBox1.Image = bitmp;
+            checkConnected(map, count);
+            
+        }
+
+
+
+
+
+        Color getBackground()
+        {
+            int half = ((bitmp.Height * bitmp.Width) / 2);
+            int counter = 0;
+            for (int i = 0; i < bitmp.Size.Height; i++)
+            {
+                for (int j = 0; j < bitmp.Size.Width; j++)
+                {
+                    var x = bitmp.GetPixel(j, i);
+                    if (x.B.Equals(255) || x.R.Equals(255) || x.G.Equals(255))
+                    {
+                        counter++;
+                    }
+                }
+
+            }
+            if (counter > half)
+            {
+                return Color.White;
+            }
+            else
+            {
+                return Color.Black;
+            }
+
+        }
+
+        public void checkConnected(int[,] map1, int count)
+        {
+            int counter = 0;
+            Boolean swap = true;
+            while (swap)
+            {
+                swap = false;
+                foreach (Coord x in fore)//uses list of component pixels to parse through to save time
+                {
+                    int label = map1[x.x, x.y];
+                    for (int k = count; k >= 0; k--)//gets all labels in complete equivalency hashes
+                    {
+                        if (comp[k].Contains(label))
+                        {
+                            map1[x.x, x.y] = k;
+                            swap = true;
+                        }
+
+                    }
+                }
+            }
+
+
+
+            foreach (Coord x in fore)
+            {
+                int label = map1[x.x, x.y];
+                if (fin.ContainsKey(label))//adds all components with labels to a final dictionary based on their label
+                {
+                    List<Coord> a = fin[label];
+                    a.Add(x);
+                    fin[label] = a;
+                }
+                else
+                {
+                    List<Coord> a = new List<Coord>();
+                    a.Add(x);
+                    fin.Add(label, a);
+                    counter = label;
+                    labels.Add(label);//list of labels needed to iterate through hash
+                }
+
+
+            }
+                
+                foreach (int label in labels)
+                {
+                    Color color = Color.FromArgb(r.Next(255), r.Next(255), r.Next(255));
+                    foreach (Coord x in fin[label])
+                    {
+                        bitmp.SetPixel(x.x, x.y, color);//changes color based on label
+                    }
+                }
+                pictureBox1.Image = bitmp;
+                pictureBox1.Show();
+
+            
+        }
+
+        
+    }
+    
+}
+    
+
